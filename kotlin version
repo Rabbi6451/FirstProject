@@ -1,0 +1,281 @@
+package TryCatchFinal
+
+import java.awt.BorderLayout
+import java.awt.FlowLayout
+import java.awt.Font
+import java.awt.Image
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileWriter
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import javax.imageio.ImageIO
+import javax.swing.JButton
+import javax.swing.JFrame
+import javax.swing.JLabel
+import javax.swing.JOptionPane
+import javax.swing.JPanel
+import javax.swing.JScrollPane
+import javax.swing.JTable
+import javax.swing.JTextField
+import javax.swing.SwingUtilities
+import javax.swing.table.DefaultTableModel
+
+data class Student(
+    var name: String,
+    var batch: String,
+    var roll: String,
+    var date: String,
+    var isPresent: Boolean
+) {
+    fun toFileString(): String {
+        return "Name: $name\n" +
+                "Batch: $batch\n" +
+                "Roll: $roll\n" +
+                "Status: ${if (isPresent) "Present" else "Absent"}\n" +
+                "Date: $date\n"
+    }
+
+    companion object {
+        /**
+         * Note: original Java fromFileString expected comma-separated values.
+         * The toFileString writes labeled lines, so this fromFileString is left
+         * for compatibility but may not work with files created by toFileString.
+         */
+        fun fromFileString(line: String): Student {
+            val parts = line.split(",")
+            return Student(
+                parts.getOrElse(0) { "" }.trim(),
+                parts.getOrElse(1) { "" }.trim(),
+                parts.getOrElse(2) { "" }.trim(),
+                parts.getOrElse(4) { "" }.trim(),
+                parts.getOrElse(3) { "" }.trim() == "Present"
+            )
+        }
+    }
+}
+
+class Attendance : JFrame("Attendance Management System") {
+
+    private val studentList = mutableListOf<Student>()
+    private val tableModel: DefaultTableModel
+    private val studentTable: JTable
+    private val dataFile: File
+
+    init {
+        // Directory and file (kept same as Java code)
+        val directory = File("D:\\Attendance")
+        if (!directory.exists()) {
+            directory.mkdirs()
+        }
+        dataFile = File(directory, "project14.txt")
+
+        setSize(1200, 600)
+        defaultCloseOperation = EXIT_ON_CLOSE
+        layout = BorderLayout()
+        contentPane.background = java.awt.Color(249, 24, 244)
+
+        // Attempt to set an icon (will silently show error dialog if fails)
+        try {
+            val iconFile = File("D:\\AttendanceSystem.png")
+            if (iconFile.exists()) {
+                val icon: Image = ImageIO.read(iconFile)
+                setIconImage(icon)
+            }
+        } catch (ex: IOException) {
+            JOptionPane.showMessageDialog(this, "Error loading icon: ${ex.message}")
+        }
+
+        val heading = JLabel("Attendance Management System", JLabel.CENTER)
+        heading.font = Font("Courier New", Font.BOLD, 20)
+        heading.background = java.awt.Color(200, 220, 255)
+
+        // Input panel and fields
+        val inputPanel = JPanel(BorderLayout())
+        inputPanel.background = java.awt.Color(20, 240, 220)
+
+        val addPanel = JPanel(FlowLayout())
+        val nameLabel = JLabel("Student Name: ")
+        val nameField = JTextField(15)
+        val batchLabel = JLabel("Batch: ")
+        val batchField = JTextField(15)
+        val rollLabel = JLabel("Roll: ")
+        val rollField = JTextField(10)
+        val addButton = JButton("Add Student")
+
+        addPanel.add(nameLabel)
+        addPanel.add(nameField)
+        addPanel.add(batchLabel)
+        addPanel.add(batchField)
+        addPanel.add(rollLabel)
+        addPanel.add(rollField)
+        addPanel.add(addButton)
+
+        val columnNames = arrayOf("Serial No.", "Name", "Batch", "Roll", "Status", "Date")
+        tableModel = DefaultTableModel(columnNames, 0)
+        studentTable = JTable(tableModel)
+        studentTable.background = java.awt.Color(25, 255, 240)
+        val tableScrollPane = JScrollPane(studentTable)
+
+        inputPanel.add(addPanel, BorderLayout.NORTH)
+        inputPanel.add(tableScrollPane, BorderLayout.CENTER)
+
+        val controlPanel = JPanel()
+        controlPanel.background = java.awt.Color(220, 220, 255)
+        val markPresentButton = JButton("Mark Present")
+        val saveButton = JButton("Save to File")
+        val deleteButton = JButton("Delete Student")
+        val searchButton = JButton("Search by Roll")
+        val statsButton = JButton("Show Statistics")
+
+        controlPanel.add(markPresentButton)
+        controlPanel.add(saveButton)
+        controlPanel.add(deleteButton)
+        controlPanel.add(searchButton)
+        controlPanel.add(statsButton)
+
+        add(heading, BorderLayout.NORTH)
+        add(inputPanel, BorderLayout.CENTER)
+        add(controlPanel, BorderLayout.SOUTH)
+
+        // Add student action
+        addButton.addActionListener {
+            val name = nameField.text.trim()
+            val batch = batchField.text.trim()
+            val roll = rollField.text.trim()
+            val currentDate = SimpleDateFormat("yyyy-MM-dd").format(Date())
+
+            if (!name.matches(Regex("[a-zA-Z ]+"))) {
+                JOptionPane.showMessageDialog(this, "Wrong Name! Name should contain only letters.")
+                return@addActionListener
+            }
+            if (!roll.matches(Regex("\\d+"))) {
+                JOptionPane.showMessageDialog(this, "Wrong Roll! Roll should contain only numbers.", "Warning", JOptionPane.WARNING_MESSAGE)
+                return@addActionListener
+            }
+
+            if (name.isNotEmpty() && batch.isNotEmpty() && roll.isNotEmpty()) {
+                val duplicate = studentList.any { it.roll.equals(roll, ignoreCase = true) && it.batch.equals(batch, ignoreCase = true) }
+                if (duplicate) {
+                    JOptionPane.showMessageDialog(this, "It's already exists")
+                    return@addActionListener
+                }
+
+                val newStudent = Student(name, batch, roll, currentDate, false)
+                studentList.add(newStudent)
+                tableModel.addRow(arrayOf<Any>(studentList.size, newStudent.name, newStudent.batch, newStudent.roll, "Absent", currentDate))
+
+                nameField.text = ""
+                batchField.text = ""
+                rollField.text = ""
+            } else {
+                JOptionPane.showMessageDialog(this, "Please fill all fields!")
+            }
+        }
+
+        // Mark present action
+        markPresentButton.addActionListener {
+            val rollNumber = JOptionPane.showInputDialog(this, "Enter the student's roll number to mark present:")
+            if (rollNumber == null || rollNumber.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please enter a roll number.")
+                return@addActionListener
+            }
+
+            var found = false
+            for ((index, student) in studentList.withIndex()) {
+                if (student.roll.equals(rollNumber.trim(), ignoreCase = true)) {
+                    student.isPresent = true
+                    student.date = SimpleDateFormat("yyyy-MM-dd").format(Date())
+                    tableModel.setValueAt("Present", index, 4)
+                    tableModel.setValueAt(student.date, index, 5)
+                    found = true
+                    break
+                }
+            }
+            if (!found) {
+                JOptionPane.showMessageDialog(this, "Student with Roll Number $rollNumber not found!")
+            }
+        }
+
+        // Delete student action
+        deleteButton.addActionListener {
+            val rollNumber = JOptionPane.showInputDialog(this, "Enter the roll number of the student to delete:")
+            if (rollNumber == null || rollNumber.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please enter a roll number.")
+                return@addActionListener
+            }
+
+            val iterator = studentList.iterator()
+            var found = false
+            var indexToRemove = -1
+            while (iterator.hasNext()) {
+                val student = iterator.next()
+                if (student.roll.equals(rollNumber.trim(), ignoreCase = true)) {
+                    indexToRemove = studentList.indexOf(student)
+                    iterator.remove()
+                    found = true
+                    break
+                }
+            }
+
+            if (found && indexToRemove != -1) {
+                tableModel.removeRow(indexToRemove)
+                saveToFile() // Save after deletion (same behavior as Java)
+            } else {
+                JOptionPane.showMessageDialog(this, "Student with Roll Number $rollNumber not found!")
+            }
+        }
+
+        // Save to file action
+        saveButton.addActionListener {
+            val recordsSaved = saveToFile()
+            JOptionPane.showMessageDialog(this, "$recordsSaved records saved successfully!")
+        }
+
+        // Search by roll action
+        searchButton.addActionListener {
+            val rollNumber = JOptionPane.showInputDialog(this, "Enter roll number to search:")
+            if (rollNumber == null || rollNumber.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please enter a roll number.")
+                return@addActionListener
+            }
+            val found = studentList.find { it.roll.equals(rollNumber.trim(), ignoreCase = true) }
+            if (found != null) {
+                val status = if (found.isPresent) "Present" else "Absent"
+                JOptionPane.showMessageDialog(this, "Name: ${found.name}\nBatch: ${found.batch}\nRoll: ${found.roll}\nStatus: $status\nDate: ${found.date}")
+            } else {
+                JOptionPane.showMessageDialog(this, "Student with Roll Number $rollNumber not found!")
+            }
+        }
+
+        // Show statistics action
+        statsButton.addActionListener {
+            val presentCount = studentList.count { it.isPresent }
+            val absentCount = studentList.size - presentCount
+            JOptionPane.showMessageDialog(this, "Total Students: ${studentList.size}\nPresent: $presentCount\nAbsent: $absentCount")
+        }
+    }
+
+    private fun saveToFile(): Int {
+        return try {
+            BufferedWriter(FileWriter(dataFile)).use { writer ->
+                for (student in studentList) {
+                    writer.write(student.toFileString())
+                    writer.newLine()
+                }
+            }
+            studentList.size
+        } catch (e: IOException) {
+            JOptionPane.showMessageDialog(this, "Error saving to file: ${e.message}")
+            0
+        }
+    }
+}
+
+fun main() {
+    SwingUtilities.invokeLater {
+        val frame = Attendance()
+        frame.isVisible = true
+    }
+}
